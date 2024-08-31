@@ -1,4 +1,5 @@
 use tokio::net::TcpListener;
+use tokio::signal;
 
 #[tokio::main]
 async fn main() {
@@ -26,21 +27,22 @@ async fn main() {
 
 /// This method will block (async) until either SIGTERM or SIGINT have been sent to the process.
 async fn shutdown_signal() {
-    use tokio::signal::unix::{signal, SignalKind};
-
     let ctrl_c = async {
-        signal(SignalKind::interrupt())
-            .expect("Failed to install SIGINT handler")
-            .recv()
+        signal::ctrl_c()
             .await
+            .expect("Failed to install Ctrl+C handler")
     };
 
+    #[cfg(unix)]
     let terminate = async {
-        signal(SignalKind::terminate())
+        signal::unix::signal(signal::unix::SignalKind::terminate())
             .expect("Failed to install SIGTERM handler")
             .recv()
             .await
     };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
 
     tokio::select! {
         _ = ctrl_c => {},
