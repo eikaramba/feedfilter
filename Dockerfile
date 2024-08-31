@@ -1,4 +1,4 @@
-FROM docker.io/library/rust:1.76-slim-bookworm AS build
+FROM docker.io/library/rust:1.80.1-slim-bookworm AS build
 WORKDIR /app
 
 COPY . .
