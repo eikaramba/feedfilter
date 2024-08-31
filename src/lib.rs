@@ -1,5 +1,7 @@
 use std::time::Duration;
-
+use encoding_rs::{ISO_8859_10, UTF_8};
+use std::borrow::Cow;
+use std::str;
 use axum::{
     extract::State,
     http::{header, StatusCode},
@@ -66,6 +68,22 @@ pub async fn feed(
 
     // read & parse body
     let body = req.bytes().await.map_err(FeedError::Read)?;
+
+    // Convert ISO-8859-1 to UTF-8 if necessary
+    let (_cow, _encoding_used, had_errors) = if content_type.contains("ISO-8859-1") {
+        ISO_8859_10.decode(&body)
+    } else {
+        (
+            Cow::Borrowed(std::str::from_utf8(&body).map_err(|_| FeedError::Encoding)?),
+            UTF_8,
+            false,
+        )
+    };
+
+    if had_errors {
+        return Err(FeedError::Encoding);
+    }
+
     let mut channel = Channel::read_from(&body[..]).map_err(FeedError::Parse)?;
 
     // filter items according to filter terms
@@ -86,7 +104,10 @@ pub async fn feed(
 
     // Render back as RSS
     Ok((
-        [(header::SERVER, APP), (header::CONTENT_TYPE, &content_type)],
+        [
+            (header::SERVER, APP),
+            (header::CONTENT_TYPE, "application/rss+xml; charset=UTF-8"),
+        ],
         channel.to_string(),
     )
         .into_response())
@@ -103,6 +124,9 @@ pub enum FeedError {
 
     #[error("Failed to parse upstream body: {0}")]
     Parse(rss::Error),
+
+    #[error("Failed to encode content to UTF-8")]
+    Encoding,
 }
 
 impl IntoResponse for FeedError {
